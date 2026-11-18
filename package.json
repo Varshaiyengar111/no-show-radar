@@ -1,0 +1,13 @@
+{
+  "name": "no-show-radar",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Flags clinic appointments likely to be missed, with reasons and a fairness check. Made-up data, no outside libraries.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20.12"
+  }
+}
