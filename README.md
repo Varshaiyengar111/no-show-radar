@@ -2,6 +2,9 @@
 
 **Help a clinic's front desk call the right patients first, so fewer appointments go to waste.**
 
+### ▶ [Try the online demo](https://varshaiyengar111.github.io/no-show-radar/)
+No install needed. Made-up data.
+
 A small AI product prototype in health tech. It learns from past appointments which ones are likely to be missed, ranks tomorrow's list, explains each flag in plain words, and checks whether the model treats age groups fairly.
 
 > Portfolio demo. All data is made up and generated in `model.js`. No real patients.
@@ -75,6 +78,8 @@ npm start
 ```
 
 Open http://localhost:3004. Move the slider to see the trade-off change, and mark patients as **Called**.
+
+**Online demo:** `npm run build:pages` saves the model's results into `docs/` so the dashboard runs on GitHub Pages with no server.
 
 ## How it works
 

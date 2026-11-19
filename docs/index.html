@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>No-Show Radar</title>
+<style>
+  :root { --bg:#f5f7f9; --card:#fff; --ink:#1b2430; --muted:#5a6676; --line:#e0e5eb; --accent:#0f6cbd; --high:#b42318; --high-bg:#fdecea; --med:#a15c07; --med-bg:#fff3e0; --low:#2b7a4b; --low-bg:#e8f5ec; --bar:#0f6cbd; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#11161c; --card:#1a2129; --ink:#e5eaf0; --muted:#9fabb9; --line:#2b3540; --accent:#6cb4ff; --high:#ffaaa1; --high-bg:#3d1b18; --med:#ffcf8a; --med-bg:#3a2a12; --low:#8fdcae; --low-bg:#16301f; --bar:#6cb4ff; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { margin: 0 0 4px; font-size: 1.6rem; }
+  h2 { font-size: 1.05rem; margin: 0 0 8px; }
+  p.lede { margin: 0 0 16px; color: var(--muted); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-top: 16px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+  .tile b { display: block; font-size: 1.5rem; }
+  .tile span { color: var(--muted); font-size: .88rem; }
+  .note { font-size: .88rem; color: var(--muted); }
+  input[type=range] { width: 100%; max-width: 360px; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: .85rem; }
+  .band { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: .8rem; font-weight: 600; }
+  .High { color: var(--high); background: var(--high-bg); } .Medium { color: var(--med); background: var(--med-bg); } .Low { color: var(--low); background: var(--low-bg); }
+  tr.flag td:first-child { box-shadow: inset 3px 0 0 var(--high); }
+  tr.done { opacity: .5; }
+  button { font: inherit; font-size: .85rem; padding: 5px 10px; border-radius: 6px; border: 1px solid var(--accent); background: transparent; color: var(--accent); cursor: pointer; white-space: nowrap; }
+  .bars div { display: grid; grid-template-columns: 150px 1fr; gap: 8px; align-items: center; margin: 4px 0; font-size: .9rem; }
+  .bars i { display: block; height: 10px; border-radius: 4px; background: var(--bar); }
+  .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .two .card { margin-top: 0; }
+  footer { margin-top: 24px; font-size: .85rem; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>No-Show Radar</h1>
+  <p class="lede">For clinic front-desk staff: see which of tomorrow's appointments are most likely to be missed, and why, so you can call those patients first. All data is made up.</p>
+
+  <div class="tiles" id="tiles"></div>
+
+  <div class="card">
+    <h2>How many patients can you call each day?</h2>
+    <label for="share" class="note">Flag the riskiest <b id="shareLabel"></b> of appointments</label><br>
+    <input type="range" id="share" min="5" max="50" step="5" value="20">
+    <p id="tradeoff" style="margin:8px 0 0"></p>
+  </div>
+
+  <div class="card">
+    <h2>Tomorrow's appointments, riskiest first</h2>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Time</th><th>Appt</th><th>Department</th><th>Risk</th><th>Why</th><th></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table></div>
+    <p class="note">The list shows reasons, not a verdict. A flag means "call to confirm", never "refuse or double-book this patient".</p>
+  </div>
+
+  <div class="two" style="margin-top:16px">
+    <div class="card">
+      <h2>What the model pays attention to</h2>
+      <div class="bars" id="bars"></div>
+      <p class="note">Age is not used. Neither is gender, religion, caste or income.</p>
+    </div>
+    <div class="card">
+      <h2>Fairness check (when flagging top 20%)</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Age group</th><th>Actual no-show rate</th><th>Flagged</th><th>No-shows caught</th></tr></thead>
+        <tbody id="fair"></tbody>
+      </table></div>
+      <p class="note" id="fairNote"></p>
+    </div>
+  </div>
+
+  <footer>Portfolio demo. Made-up data from <code>model.js</code>. Model: logistic regression trained on 2,400 appointments and tested on 600 it hadn't seen.</footer>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const pct = (x) => `${Math.round(x * 100)}%`;
+const LABELS = { lead_days: "Days booked ahead", prior_no_shows: "Past missed visits", distance_km: "Distance from clinic", no_reminder: "No reminder sent", first_visit: "First visit", evening: "Evening slot", monday: "Monday" };
+let D;
+
+// On GitHub Pages there is no server, so the page reads a saved copy of the results.
+const STATIC = location.hostname.endsWith("github.io") || new URLSearchParams(location.search).has("static");
+fetch(STATIC ? "dashboard.json" : "/api/dashboard").then((r) => r.json()).then((d) => { D = d; draw(); });
+$("share").oninput = draw;
+
+function atShare(share) {
+  const s = [...D.test].sort((a, b) => b[0] - a[0]);
+  const k = Math.max(1, Math.round(s.length * share));
+  const caught = s.slice(0, k).filter((x) => x[1]).length;
+  const total = s.filter((x) => x[1]).length;
+  return { k, precision: caught / k, recall: caught / total, cutoff: s[k - 1][0] };
+}
+
+function draw() {
+  const share = Number($("share").value) / 100;
+  $("shareLabel").textContent = pct(share);
+  const m = atShare(share), base = D.summary.base_rate;
+
+  $("tiles").innerHTML = `
+    <div class="tile"><b>${pct(base)}</b><span>of appointments are missed (made-up clinic)</span></div>
+    <div class="tile"><b>${D.summary.auc.toFixed(2)}</b><span>AUC on unseen data (0.5 = guessing, 1 = perfect)</span></div>
+    <div class="tile"><b>${pct(m.precision)}</b><span>of flagged patients really don't show</span></div>
+    <div class="tile"><b>${(m.precision / base).toFixed(1)}×</b><span>better than calling patients at random</span></div>`;
+
+  $("tradeoff").innerHTML = `Calling the top <b>${pct(share)}</b> reaches <b>${pct(m.recall)}</b> of the people who would miss their visit. Of every 10 calls, about <b>${Math.round(m.precision * 10)}</b> go to someone who would have missed it.`;
+
+  const band = (r) => (r >= m.cutoff ? "High" : r >= base ? "Medium" : "Low");
+  $("rows").innerHTML = D.tomorrow.map((a) => `
+    <tr class="${band(a.risk) === "High" ? "flag" : ""}" id="r-${a.id}">
+      <td>${a.time}</td><td>${a.id}</td><td>${a.specialty}</td>
+      <td><span class="band ${band(a.risk)}">${band(a.risk)}</span> ${pct(a.risk)}</td>
+      <td>${a.reasons.length ? a.reasons.join(", ") : "<span class='note'>nothing stands out</span>"}</td>
+      <td><button onclick="document.getElementById('r-${a.id}').classList.toggle('done')">Called</button></td>
+    </tr>`).join("");
+
+  const maxW = Math.max(...D.weights.map((w) => Math.abs(w.weight)));
+  $("bars").innerHTML = [...D.weights].sort((a, b) => b.weight - a.weight)
+    .map((w) => `<div><span>${LABELS[w.feature]}</span><i style="width:${(Math.abs(w.weight) / maxW) * 100}%"></i></div>`).join("");
+
+  $("fair").innerHTML = D.fairness.map((f) => `<tr><td>${f.group}</td><td>${pct(f.no_show_rate)}</td><td>${pct(f.flagged_rate)}</td><td>${pct(f.recall)}</td></tr>`).join("");
+  const lo = D.fairness.reduce((a, b) => (a.recall < b.recall ? a : b)), hi = D.fairness.reduce((a, b) => (a.recall > b.recall ? a : b));
+  $("fairNote").textContent = `The ${lo.group} group misses visits at least as often but gets fewer calls (${pct(lo.recall)} of their no-shows caught vs ${pct(hi.recall)} for ${hi.group}). Leaving age out of the model didn't make results equal. See the README for what I'd do about it.`;
+}
+</script>
+</body>
+</html>

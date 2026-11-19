@@ -83,7 +83,9 @@ const pct = (x) => `${Math.round(x * 100)}%`;
 const LABELS = { lead_days: "Days booked ahead", prior_no_shows: "Past missed visits", distance_km: "Distance from clinic", no_reminder: "No reminder sent", first_visit: "First visit", evening: "Evening slot", monday: "Monday" };
 let D;
 
-fetch("/api/dashboard").then((r) => r.json()).then((d) => { D = d; draw(); });
+// On GitHub Pages there is no server, so the page reads a saved copy of the results.
+const STATIC = location.hostname.endsWith("github.io") || new URLSearchParams(location.search).has("static");
+fetch(STATIC ? "dashboard.json" : "/api/dashboard").then((r) => r.json()).then((d) => { D = d; draw(); });
 $("share").oninput = draw;
 
 function atShare(share) {
